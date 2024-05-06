@@ -142,16 +142,16 @@ elif st.session_state.doc_loaded_status == False:
     st.session_state.doc_loaded_status = True
     st.sidebar.write(f"我還是有執行喔{st.session_state.doc_loaded_status}")
 
-## LLM-AzureOpenAI
-# llm = AzureChatOpenAI(
-#     api_key=st.secrets["AZURE_OPENAI_KEY"],
-#     api_version="2024-02-15-preview",
-#     azure_endpoint=st.secrets["AZURE_OPENAI_ENDPOINT"],
-#     azure_deployment="gpt-4-assistant",
-# )
+# LLM-AzureOpenAI
+llm = AzureChatOpenAI(
+    api_key=st.secrets["AZURE_OPENAI_KEY"],
+    api_version="2024-02-15-preview",
+    azure_endpoint=st.secrets["AZURE_OPENAI_ENDPOINT"],
+    azure_deployment="gpt-4-assistant",
+)
 
 # LLM-OpenAI
-llm = ChatOpenAI(model="gpt-4-1106-preview", api_key=os.getenv("OPENAI_API"))
+# llm = ChatOpenAI(model="gpt-4-1106-preview", api_key=os.getenv("OPENAI_API"))
 
 # Memory
 msgs = StreamlitChatMessageHistory()
