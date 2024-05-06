@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 import tempfile
+import random
+import string
 
 from langchain_community.document_loaders import (
     Docx2txtLoader,
@@ -9,10 +11,15 @@ from langchain_community.document_loaders import (
     UnstructuredPowerPointLoader,
     UnstructuredExcelLoader,
 )
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI, ChatOpenAI
 from langchain_community.vectorstores import Chroma
+from langchain.prompts.prompt import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferWindowMemory
+from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 
 
 loader_map = {
@@ -25,36 +32,18 @@ loader_map = {
 }
 
 
-# 取得檔案類型擴展名
-def get_file_tyep(filename):
+def get_file_type(filename):
     _, file_type = os.path.splitext(filename)
     return file_type.lower()
 
 
 def file_load(uploaded_files):
     """read document"""
-    sup_filenames = []
     docs = []
     temp_dir = tempfile.TemporaryDirectory()
 
     for file in uploaded_files:
-        if file.name.endswith(".docx"):
-            sup_filenames.append(file.name)
-            temp_path = os.path.join(temp_dir.name, file.name)
-            with open(temp_path, "wb") as temp_file:
-                temp_file.write(file.getvalue())
-                loader = Docx2txtLoader(temp_path)
-                docs.extend(loader.load())
-    return sup_filenames, docs
-
-
-def file_load_new(uploaded_files):
-    """read document"""
-    docs = []
-    temp_dir = tempfile.TemporaryDirectory()
-
-    for file in uploaded_files:
-        file_type = get_file_tyep(file.name)
+        file_type = get_file_type(file.name)
         if file_type in loader_map:
             temp_path = os.path.join(temp_dir.name, file.name)
             with open(temp_path, "wb") as temp_file:
@@ -67,10 +56,16 @@ def file_load_new(uploaded_files):
 
 def file_splitter(docs):
     """document split"""
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
     splits = splitter.split_documents(docs)
 
     return splits
+
+
+def generate_random_code(length):
+    characters = string.ascii_letters + string.digits
+    code = "".join(random.choice(characters) for _ in range(length))
+    return code
 
 
 def embedding_to_vector(document_splits):
@@ -80,42 +75,74 @@ def embedding_to_vector(document_splits):
         azure_endpoint=os.getenv("AZURE_OPENAI_EMBD_ENDPOINT"),
         azure_deployment="xiaochiao-emd3-embeddings-000",
     )
-    vectorstore = Chroma.from_documents(documents=document_splits, embedding=model)
+
+    uniq_code = generate_random_code(12)
+    uniq_code = "456"
+
+    persist_directory = f"./Chroma/{uniq_code}"
+
+    vectorstore = Chroma.from_documents(
+        documents=document_splits, embedding=model, persist_directory=persist_directory
+    )
 
     retriever = vectorstore.as_retriever(
-        search_type="mmr", search_kwargs={"k": 2, "fetch_k": 4}
+        search_type="mmr", search_kwargs={"k": 3, "fetch_k": 5}
     )
 
     return retriever
 
 
-# title setting
-st.set_page_config(page_title="LangChain: Chat with your documents", page_icon="💻")
-st.title(
-    ":grinning_face_with_one_large_and_one_small_eye: Chat with Adorable Assistant"
-)
+# answer source extract
+def source_extract(ai_response):
+    sources = []
+    for source in ai_response["source_documents"]:
+        sources.append(os.path.split(source.metadata["source"])[1])
+    unique_sources = list(set(sources))
+
+    return unique_sources
+
+
+def btn_confirm_click():
+    st.session_state.btn_confirm_click = True
+
+
+# webpage title setting
+st.set_page_config(page_title="Your Adorable Assistant", page_icon="💻")
+st.title(":paperclip: Chat with Your Documents")
 
 # file selector
-uploaded_files = st.sidebar.file_uploader(
-    label="Select",
+files = st.sidebar.file_uploader(
+    label="File_select",
     type=["docx", "pptx", "csv", "pdf", "xlsx"],
     accept_multiple_files=True,
     label_visibility="hidden",
+    key="file_uploader",
 )
 
-
-if not uploaded_files:
-    st.info("Please upload documents to continue.")
-    # 停頓點
+if not files:
+    st.info("Select documents to continue.")
     st.stop()
 
+if "btn_confirm_click" not in st.session_state:
+    st.session_state.btn_confirm_click = False
 
-docs = file_load_new(uploaded_files)
-splits = file_splitter(docs)
-retriever = embedding_to_vector(splits)
+if "doc_loaded_status" not in st.session_state:
+    st.session_state.doc_loaded_status = False
 
+st.sidebar.button(label="Confirm", type="primary", on_click=btn_confirm_click)
 
-# AzureOpenAI
+if st.session_state.btn_confirm_click == False:
+    st.info("Upload documents to continue.")
+    st.stop()
+elif st.session_state.doc_loaded_status == False:
+    docs = file_load(files)
+    splits = file_splitter(docs)
+    st.session_state.retriever = embedding_to_vector(splits)
+    st.info("Files have aleady uploaded.")
+    st.session_state.doc_loaded_status = True
+    st.sidebar.write(f"我還是有執行喔{st.session_state.doc_loaded_status}")
+
+## LLM-AzureOpenAI
 # llm = AzureChatOpenAI(
 #     api_key=st.secrets["AZURE_OPENAI_KEY"],
 #     api_version="2024-02-15-preview",
@@ -123,44 +150,93 @@ retriever = embedding_to_vector(splits)
 #     azure_deployment="gpt-4-assistant",
 # )
 
-# OpenAI
+# LLM-OpenAI
 llm = ChatOpenAI(model="gpt-4-1106-preview", api_key=os.getenv("OPENAI_API"))
 
-# Chain
-qa_chain = ConversationalRetrievalChain.from_llm(
-    llm=llm, retriever=retriever, verbose=True
+# Memory
+msgs = StreamlitChatMessageHistory()
+memory = ConversationBufferWindowMemory(
+    memory_key="chat_history",
+    chat_memory=msgs,
+    return_messages=True,
+    output_key="answer",
 )
 
+# question_template
+# question_template = """
+# 1. 你是一名文件助理，請你根據我的問題，從文件中查詢相關資料進行回應。
+# 2. 記住，你的回應請簡短扼要。
+# 3. 如果你不知道的問題，請回答 "NA"。
+# {question}"""
+# question_prompt = PromptTemplate(
+#     template=question_template, input_variables=["question"]
+# )
+
+# system message template
+sys_template = """
+1. 你是一名文件助理，請妳根據我的問題，參考文件後進行回應。
+2. 記住，你的回覆應該是簡潔扼要。
+3. 請不要對文檔內容進行翻譯。
+4. 如果你不知道，請不要任意回覆"。
+
+文件內容是: {context} """
+
+sys_msg_template = SystemMessagePromptTemplate.from_template(template=sys_template)
+
+# Chain
+chain = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    retriever=st.session_state.retriever,
+    memory=memory,
+    # condense_question_prompt=question_prompt,
+    return_source_documents=True,
+    verbose=True,
+)
+
+chain.combine_docs_chain.llm_chain.prompt.messages[0] = sys_msg_template
+
+# # Initialize st_chat history and create message container
+# if "messages" not in st.session_state:
+#     st.session_state.messages = []
+#     with st.chat_message("assistant"):
+#         st.write("How can I help you today?")
+
+# # Display chat messages from history
+# for message in st.session_state.messages:
+#     with st.chat_message(message["role"]):
+#         st.markdown(message["content"])
+
+# # Accept user input
+# if prompt := st.chat_input(placeholder="Ask me anything."):
+#     # Add user message to chat history(streamlit)
+#     st.session_state.messages.append({"role": "user", "content": prompt})
+#     # Display user message in chat message
+#     with st.chat_message("user"):
+#         st.markdown(prompt)
+#     # LLM's Response
+#     response = qa_chain({"question": prompt})
+#     # Add assistant message in chat message (streamlit)
+#     answer = response["answer"]
+#     st.session_state.messages.append({"role": "assistant", "content": answer})
+#     # Display assistant response in chat message container
+#     with st.chat_message("assistant"):
+#         st.markdown(answer)
+
 # Initialize st_chat history and create message container
-if "messages" not in st.session_state:
-    # Chat history
-    chat_history = []
-    st.session_state.messages = []
-    with st.chat_message("assistant"):
-        st.write("How can i help you today?")
+if len(msgs.messages) == 0:
+    msgs.clear()
+    msgs.add_ai_message("How can I help you?")
 
-# Display chat messages from history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Display history message
+avatars = {"human": "user", "ai": "assistant"}
+for msg in msgs.messages:
+    st.chat_message(avatars[msg.type]).write(msg.content)
 
-
-# Accept user input
+# User/AI Conversation
 if prompt := st.chat_input(placeholder="Ask me anything!"):
-
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-
-    # Display user message in chat message
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    # Display assistant response in chat message container
+    st.chat_message("user").write(prompt)
     with st.chat_message("assistant"):
-        result = qa_chain({"question": prompt, "chat_history": chat_history})
-        response = result["answer"]
-        st.markdown(response)
-
-    # Add assistant message in chat message (streamlit)
-    chat_history.append((prompt, response))
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        response = chain.invoke(prompt)
+        st.markdown(response["answer"])
+        source = source_extract(response)
+        st.sidebar.write(f"Reference sources: {source}")
