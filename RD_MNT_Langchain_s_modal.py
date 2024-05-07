@@ -77,7 +77,6 @@ def embedding_to_vector(document_splits):
     )
 
     uniq_code = generate_random_code(12)
-    uniq_code = "456"
 
     persist_directory = f"./Chroma/{uniq_code}"
 
@@ -140,17 +139,16 @@ elif st.session_state.doc_loaded_status == False:
     st.session_state.retriever = embedding_to_vector(splits)
     st.info("Files have aleady uploaded.")
     st.session_state.doc_loaded_status = True
-    st.sidebar.write(f"我還是有執行喔{st.session_state.doc_loaded_status}")
 
 # LLM-AzureOpenAI
 llm = AzureChatOpenAI(
-    api_key=st.secrets["AZURE_OPENAI_KEY"],
+    api_key=os.getenv("AZURE_OPENAI_KEY"),
     api_version="2024-02-15-preview",
-    azure_endpoint=st.secrets["AZURE_OPENAI_ENDPOINT"],
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     azure_deployment="gpt-4-assistant",
 )
 
-# LLM-OpenAI
+# # LLM - OpenAI
 # llm = ChatOpenAI(model="gpt-4-1106-preview", api_key=os.getenv("OPENAI_API"))
 
 # Memory
