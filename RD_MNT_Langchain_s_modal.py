@@ -199,32 +199,6 @@ chain = ConversationalRetrievalChain.from_llm(
 
 chain.combine_docs_chain.llm_chain.prompt.messages[0] = sys_msg_template
 
-# # Initialize st_chat history and create message container
-# if "messages" not in st.session_state:
-#     st.session_state.messages = []
-#     with st.chat_message("assistant"):
-#         st.write("How can I help you today?")
-
-# # Display chat messages from history
-# for message in st.session_state.messages:
-#     with st.chat_message(message["role"]):
-#         st.markdown(message["content"])
-
-# # Accept user input
-# if prompt := st.chat_input(placeholder="Ask me anything."):
-#     # Add user message to chat history(streamlit)
-#     st.session_state.messages.append({"role": "user", "content": prompt})
-#     # Display user message in chat message
-#     with st.chat_message("user"):
-#         st.markdown(prompt)
-#     # LLM's Response
-#     response = qa_chain({"question": prompt})
-#     # Add assistant message in chat message (streamlit)
-#     answer = response["answer"]
-#     st.session_state.messages.append({"role": "assistant", "content": answer})
-#     # Display assistant response in chat message container
-#     with st.chat_message("assistant"):
-#         st.markdown(answer)
 
 # Initialize st_chat history and create message container
 if len(msgs.messages) == 0:
