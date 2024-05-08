@@ -14,6 +14,8 @@ from langchain_community.document_loaders import (
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI, ChatOpenAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.chat_models import ChatOllama
 from langchain_community.vectorstores import Chroma
 from langchain.prompts.prompt import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
@@ -69,12 +71,14 @@ def generate_random_code(length):
 
 
 def embedding_to_vector(document_splits):
-    model = AzureOpenAIEmbeddings(
-        api_key=os.getenv("AZURE_OPENAI_EMBD_KEY"),
-        api_version="2023-03-15-preview",
-        azure_endpoint=os.getenv("AZURE_OPENAI_EMBD_ENDPOINT"),
-        azure_deployment="xiaochiao-emd3-embeddings-000",
-    )
+    # model = AzureOpenAIEmbeddings(
+    #     api_key=os.getenv("AZURE_OPENAI_EMBD_KEY"),
+    #     api_version="2023-03-15-preview",
+    #     azure_endpoint=os.getenv("AZURE_OPENAI_EMBD_ENDPOINT"),
+    #     azure_deployment="xiaochiao-emd3-embeddings-000",
+    # )
+    model_name = "sentence-transformers/all-MiniLM-L12-v2"
+    model = HuggingFaceEmbeddings(model_name=model_name)
 
     uniq_code = generate_random_code(12)
 
@@ -140,13 +144,16 @@ elif st.session_state.doc_loaded_status == False:
     st.info("Files have aleady uploaded.")
     st.session_state.doc_loaded_status = True
 
+# LLM - Ollama(llama3)
+llm = ChatOllama(model="llama3")
+
 # LLM-AzureOpenAI
-llm = AzureChatOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
-    api_version="2024-02-15-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    azure_deployment="gpt-4-assistant",
-)
+# llm = AzureChatOpenAI(
+#     api_key=os.getenv("AZURE_OPENAI_KEY"),
+#     api_version="2024-02-15-preview",
+#     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+#     azure_deployment="gpt-4-assistant",
+# )
 
 # # LLM - OpenAI
 # llm = ChatOpenAI(model="gpt-4-1106-preview", api_key=os.getenv("OPENAI_API"))
@@ -173,9 +180,8 @@ memory = ConversationBufferWindowMemory(
 # system message template
 sys_template = """
 1. 你是一名文件助理，請妳根據我的問題，參考文件後進行回應。
-2. 記住，你的回覆應該是簡潔扼要。
-3. 請不要對文檔內容進行翻譯。
-4. 如果你不知道，請不要任意回覆"。
+2. 你的回覆應該是簡潔扼要。
+3. 如果你不知道，請不要任意回覆"。
 
 文件內容是: {context} """
 
