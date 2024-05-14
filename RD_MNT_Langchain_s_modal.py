@@ -182,9 +182,9 @@ memory = ConversationBufferWindowMemory(
 
 # question_template
 # question_template = """
-# 1. 你是一名文件助理，請你根據我的問題，從文件中查詢相關資料進行回應。
-# 2. 記住，你的回應請簡短扼要。
-# 3. 如果你不知道的問題，請回答 "NA"。
+# 1. You are a document assistant. You can reply based on my questions and refer to the documents.
+# 2. Your response should be brief and concise.
+# 3. If you don’t know, please don’t make it up or give arbitrary answers.
 # {question}"""
 # question_prompt = PromptTemplate(
 #     template=question_template, input_variables=["question"]
@@ -192,11 +192,11 @@ memory = ConversationBufferWindowMemory(
 
 # system message template
 sys_template = """
-1. 你是一名文件助理，請妳根據我的問題，參考文件後進行回應。
-2. 你的回覆應該是簡潔扼要。
-3. 如果你不知道，請不要任意回覆"。
+1. You are a document assistant. You can reply based on my questions and refer to the documents.
+2. Your response should be brief and concise.
+3. If you don’t know, please don’t make it up or give arbitrary answers.
 
-文件內容是: {context} """
+The content of documents: {context}"""
 
 sys_msg_template = SystemMessagePromptTemplate.from_template(template=sys_template)
 
