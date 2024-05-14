@@ -68,7 +68,7 @@ def generate_random_code(length):
     return code
 
 
-def embedding_to_vector(document_splits):
+def embedding_to_vector(document_splits, docstore_id=None):
     # model = AzureOpenAIEmbeddings(
     #     api_key=os.getenv("AZURE_OPENAI_EMBD_KEY"),
     #     api_version="2023-03-15-preview",
@@ -77,13 +77,12 @@ def embedding_to_vector(document_splits):
     # )
     model_name = "sentence-transformers/all-MiniLM-L12-v2"
     model = HuggingFaceEmbeddings(model_name=model_name)
-
-    uniq_code = generate_random_code(12)
-
-    persist_directory = f"./Chroma/{uniq_code}"
-
+    persist_directory = f"./Chroma/{docstore_id}"
     vectorstore = Chroma.from_documents(
-        documents=document_splits, embedding=model, persist_directory=persist_directory
+        documents=document_splits,
+        embedding=model,
+        persist_directory=persist_directory,
+        collection_name="opengpt",
     )
 
     retriever = vectorstore.as_retriever(
@@ -104,31 +103,31 @@ def source_extract(ai_response):
 
 
 # streamlit button status for button upload
-def btn_upload_status():
-    st.session_state.btn_upload_click = True
+def upload_initial_status_update():
+    st.session_state.upload_initial = False
 
+
+# Memory initial
+document_chat_msgs = StreamlitChatMessageHistory()
 
 # webpage title setting
-st.set_page_config(page_title="GPT Protorype", page_icon="📎")
+st.set_page_config(page_title="OpenGPT Prototype", page_icon="📎")
 st.title("Chat with Your Documents")
 
 
-msgs = StreamlitChatMessageHistory()
-
-if st.sidebar.button(label="New Chat", type="secondary", key="btn_new_chat"):
-    if "btn_upload_click" in st.session_state:
-        del st.session_state.btn_upload_click
-    if "docs_upload_status" in st.session_state:
-        del st.session_state.docs_upload_status
-    msgs.clear()
-
-if "btn_upload_click" not in st.session_state:
-    st.session_state.btn_upload_click = False
-
-if "docs_upload_status" not in st.session_state:
-    st.session_state.docs_upload_status = False
+# 新對話視窗(新記憶位置)
+if st.sidebar.button(label="New Chat", type="secondary"):
+    document_chat_msgs.clear()
+    del st.session_state.file_uploader
+    del st.session_state.upload_initial
+    del st.session_state.doc_store_id
 
 
+if "upload_initial" not in st.session_state:
+    st.session_state.upload_initial = True
+    st.session_state.doc_store_id = generate_random_code(16)
+
+# Files 在觸發 form_submit_button 才會改變
 with st.sidebar.form(key="form_fileloader", clear_on_submit=True):
     files = st.file_uploader(
         label="File Loader",
@@ -137,25 +136,30 @@ with st.sidebar.form(key="form_fileloader", clear_on_submit=True):
         label_visibility="hidden",
         key="file_uploader",
     )
-    st.form_submit_button("Upload", type="primary", on_click=btn_upload_status)
+    form_btn_upload = st.form_submit_button(
+        "Upload", type="primary", on_click=upload_initial_status_update
+    )
 
-if not files or st.session_state.btn_upload_click == False:
-    st.info("Upload your documents to continue.")
+
+if st.session_state.upload_initial:
+    st.info("Please upload your documents to continue.")
     st.stop()
 
-else:
+elif len(files) > 0:
     docs = file_load(files)
     splits = file_splitter(docs)
-    st.session_state.retriever = embedding_to_vector(splits)
-    st.info("Your files have already uploaded.")
-# elif st.session_state.docs_upload_status == False:
-#     docs = file_load(files)
-#     splits = file_splitter(docs)
-#     st.session_state.retriever = embedding_to_vector(splits)
-#     st.info("Your files have already uploaded.")
-#     st.session_state.docs_upload_status = True
+    st.session_state.retriever = embedding_to_vector(
+        document_splits=splits, docstore_id=st.session_state.doc_store_id
+    )
+    st.info("Documents have already uploaded.")
+    files = []
 
-# # LLM - Ollama(llama3)
+elif not files and form_btn_upload:
+    st.warning("Oops, there are no documents.")
+
+
+# ------------------------------
+# LLM - Ollama(llama3)
 # llm = ChatOllama(model="llama3")
 
 # LLM-AzureOpenAI
@@ -171,7 +175,7 @@ llm = AzureChatOpenAI(
 # Memory
 memory = ConversationBufferWindowMemory(
     memory_key="chat_history",
-    chat_memory=msgs,
+    chat_memory=document_chat_msgs,
     return_messages=True,
     output_key="answer",
 )
@@ -210,12 +214,12 @@ chain.combine_docs_chain.llm_chain.prompt.messages[0] = sys_msg_template
 
 
 # Initialize st_chat history and create message container
-if len(msgs.messages) == 0:
-    msgs.add_ai_message("How can I help you?")
+if len(document_chat_msgs.messages) == 0:
+    document_chat_msgs.add_ai_message("How can I help you?")
 
 # Display history message
 avatars = {"human": "user", "ai": "assistant"}
-for msg in msgs.messages:
+for msg in document_chat_msgs.messages:
     st.chat_message(avatars[msg.type]).write(msg.content)
 
 # User/AI Conversation
